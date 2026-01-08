@@ -1,0 +1,64 @@
+name: Trivy Container Scan
+
+on:
+  push:
+    branches: [main, master, security-lab]
+    paths:
+      - "Dockerfile"
+      - "package*.json"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  scan:
+    name: Build and Scan Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: app:${{ github.sha }}
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "image"
+          image-ref: "app:${{ github.sha }}"
+          scanners: "vuln,secret"
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "0"
+          timeout: "10m"
+
+      - name: Scan image (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "image"
+          image-ref: "app:${{ github.sha }}"
+          scanners: "vuln,secret"
+          severity: "CRITICAL,HIGH"
+          format: "sarif"
+          output: "container.sarif"
+          exit-code: "0"
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: "container.sarif"
